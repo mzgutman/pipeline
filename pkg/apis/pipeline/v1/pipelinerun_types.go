@@ -581,6 +581,20 @@ type PipelineRunStatusFields struct {
 
 	// SpanContext contains tracing span context fields
 	SpanContext map[string]string `json:"spanContext,omitempty"`
+
+	// RetriedTaskResults holds memoized results from preserved tasks on the
+	// source PipelineRun, so rerun tasks can resolve $(tasks.X.results.Y)
+	// without a live TaskRun for the preserved task.
+	// +optional
+	// +listType=atomic
+	RetriedTaskResults []RetriedTaskResult `json:"retriedTaskResults,omitempty"`
+}
+
+// RetriedTaskResult stores one memoized result from a preserved task.
+type RetriedTaskResult struct {
+	PipelineTaskName string `json:"pipelineTaskName"`
+	Name             string `json:"name"`
+	Value            string `json:"value"`
 }
 
 // SkippedTask is used to describe the Tasks that were skipped due to their When Expressions

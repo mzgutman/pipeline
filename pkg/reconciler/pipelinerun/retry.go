@@ -15,9 +15,12 @@ import (
 func (c *Reconciler) setupRetry(ctx context.Context, pr *v1.PipelineRun) error {
     logger := logging.FromContext(ctx)
     sourceRunName := pr.Annotations[v1.RetryOfAnnotation]
-    sourceRunUID  := pr.Annotations[v1.RetryOfUIDAnnotation]
     strategy      := pr.Annotations[v1.RetryStrategyAnnotation]
-    logger.Infof("PipelineRun %s/%s is a retry of %s (uid=%s, strategy=%s)",
-        pr.Namespace, pr.Name, sourceRunName, sourceRunUID, strategy)
+    logger.Infof("PipelineRun %s/%s is a retry of %s (strategy=%s)",
+        pr.Namespace, pr.Name, sourceRunName, strategy)
+    // TODO(poc-2): pass real state+facts once source PipelineRun is fetched
+    // TODO(poc-3): fetch source PipelineRun by pr.Annotations[RetryOfAnnotation],
+    // call resources.HarvestRetryResults, store in pr.Status.RetriedTaskResults
+    // TODO(poc-4): wire isBypassed() predicate
     return nil
 }
