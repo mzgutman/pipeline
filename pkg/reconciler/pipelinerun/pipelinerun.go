@@ -301,6 +301,16 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) (rec
 		logger.Errorf("Failed to propagate pipeline name label to pipelinerun %s: %v", pr.Name, err)
 		return c.emitReconcileEvents(ctx, pr, before, err)
 	}
+	
+	// If this PipelineRun is a retry of another, handle it via the retry path.
+	if pr.IsRetry() {
+		if err := c.setupRetry(ctx, pr); err != nil {
+			logger.Errorf("Error in retry setup for PipelineRun %s: %v", pr.Name, err)
+			return c.emitReconcileEvents(ctx, pr, before, err)
+		}
+		// POC-1: stub exits here. Later POC stories will continue into normal reconcile.
+		return c.emitReconcileEvents(ctx, pr, before, nil)
+	}
 
 	// If the pipelinerun is cancelled, cancel tasks and update status
 	if pr.IsCancelled() {

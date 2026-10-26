@@ -161,6 +161,13 @@ func (pr *PipelineRun) IsPending() bool {
 	return pr.Spec.Status == PipelineRunSpecStatusPending
 }
 
+// IsRetry returns true if this PipelineRun is a retry of another PipelineRun,
+// indicated by the presence of the retryOf annotation.
+func (pr *PipelineRun) IsRetry() bool {
+    _, ok := pr.Annotations[RetryOfAnnotation]
+    return ok
+}
+
 // GetNamespacedName returns a k8s namespaced name that identifies this PipelineRun
 func (pr *PipelineRun) GetNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Namespace: pr.Namespace, Name: pr.Name}
@@ -446,6 +453,18 @@ const (
 
 // PipelineTaskOnErrorAnnotation is used to pass the failure strategy to TaskRun pods from PipelineTask OnError field
 const PipelineTaskOnErrorAnnotation = "pipeline.tekton.dev/pipeline-task-on-error"
+
+// RetryOfAnnotation is the annotation key set on a retry PipelineRun pointing
+// to the name of the source (failed) PipelineRun being retried.
+const RetryOfAnnotation = "tekton.dev/retryOf"
+
+// RetryOfUIDAnnotation holds the UID of the source PipelineRun, guarding
+// against accidental name reuse after deletion.
+const RetryOfUIDAnnotation = "tekton.dev/retryOfUID"
+
+// RetryStrategyAnnotation holds the retry strategy: "full" re-runs every task,
+// "partial" re-runs only the failed subgraph.
+const RetryStrategyAnnotation = "tekton.dev/retryStrategy"
 
 func (t PipelineRunReason) String() string {
 	return string(t)
