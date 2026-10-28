@@ -588,11 +588,20 @@ type PipelineRunStatusFields struct {
 	// +optional
 	// +listType=atomic
 	RetriedTaskResults []RetriedTaskResult `json:"retriedTaskResults,omitempty"`
+
 	// BypassedTaskNames is the list of task names that were preserved (succeeded)
 	// on the source PipelineRun and are bypassed on this partial retry.
 	// +optional
 	// +listType=atomic
 	BypassedTaskNames []string `json:"bypassedTaskNames,omitempty"`
+
+	// RetrySetupComplete records that setupRetry has already computed the
+	// preserved/rerun subgraph and harvested results for this retry
+	// PipelineRun, so subsequent reconciliations can skip recomputation —
+	// even when BypassedTaskNames and RetriedTaskResults are both
+	// legitimately empty (nothing was preserved).
+	// +optional
+	RetrySetupComplete bool `json:"retrySetupComplete,omitempty"`
 }
 
 // RetriedTaskResult stores one memoized result from a preserved task.

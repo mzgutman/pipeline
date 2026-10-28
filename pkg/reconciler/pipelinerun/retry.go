@@ -25,8 +25,8 @@ func (c *Reconciler) setupRetry(ctx context.Context, pr *v1.PipelineRun) error {
 	logger.Infof("PipelineRun %s/%s is a retry of %s (strategy=%s)",
 		pr.Namespace, pr.Name, sourceRunName, strategy)
 
-	// Already populated on a previous reconciliation — nothing to do.
-	if len(pr.Status.BypassedTaskNames) > 0 || len(pr.Status.RetriedTaskResults) > 0 {
+	// Already computed on a previous reconciliation — nothing to do.
+	if pr.Status.RetrySetupComplete {
 		return nil
 	}
 
@@ -69,6 +69,7 @@ func (c *Reconciler) setupRetry(ctx context.Context, pr *v1.PipelineRun) error {
 	for name := range subgraph.PreservedTasks {
 		pr.Status.BypassedTaskNames = append(pr.Status.BypassedTaskNames, name)
 	}
+	pr.Status.RetrySetupComplete = true
 
 	logger.Infof("setupRetry: bypassed=%v rerun=%v memoized=%d results",
 		pr.Status.BypassedTaskNames, keys(subgraph.RerunTasks), len(pr.Status.RetriedTaskResults))
