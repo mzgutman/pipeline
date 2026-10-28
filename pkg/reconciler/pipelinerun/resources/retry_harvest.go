@@ -16,6 +16,9 @@ func HarvestRetryResults(
     statusResults []v1.PipelineRunResult,
     preservedTasks map[string]bool,
 ) []v1.RetriedTaskResult {
+    if pipelineSpec == nil {
+		return nil
+	}
     // Build a lookup: pipeline result name → resolved value
     resolvedByName := make(map[string]string, len(statusResults))
     for _, r := range statusResults {

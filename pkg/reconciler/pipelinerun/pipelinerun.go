@@ -821,6 +821,17 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 			Clock: c.Clock,
 		},
 	}
+
+	// POC-4: for partial retries, mark preserved tasks as bypassed so they
+	// are treated as already-succeeded by the scheduling logic.
+	if pr.IsRetry() && len(pr.Status.BypassedTaskNames) > 0 {
+		pipelineRunFacts.BypassedTasks = make(map[string]bool, len(pr.Status.BypassedTaskNames))
+		for _, name := range pr.Status.BypassedTaskNames {
+			pipelineRunFacts.BypassedTasks[name] = true
+		}
+	}
+
+
 	if pr.Status.StartTime != nil {
 		pipelineRunFacts.TimeoutsState.StartTime = &pr.Status.StartTime.Time
 	}

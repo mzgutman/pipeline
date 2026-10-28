@@ -314,6 +314,9 @@ func (t ResolvedPipelineTask) isFailure() bool {
 	return t.haveAnyTaskRunsFailed() && isDone
 }
 
+func (t *ResolvedPipelineTask) isBypassed(facts *PipelineRunFacts) bool {
+    return facts.BypassedTasks != nil && facts.BypassedTasks[t.PipelineTask.Name]
+}
 // isValidationFailed return true if the task is failed at the validation step
 func (t ResolvedPipelineTask) isValidationFailed(ftasks []*ResolvedPipelineTask) bool {
 	for _, ftask := range ftasks {
@@ -462,6 +465,8 @@ func (t *ResolvedPipelineTask) skip(facts *PipelineRunFacts) TaskSkipStatus {
 	switch {
 	case facts.isFinalTask(t.PipelineTask.Name) || t.isScheduled() || t.isValidationFailed(facts.ValidationFailedTask):
 		skippingReason = v1.None
+	case t.isBypassed(facts):              
+		skippingReason = v1.BypassedRetrySkip
 	case facts.IsStopping():
 		skippingReason = v1.StoppingSkip
 	case facts.IsGracefullyCancelled():
@@ -531,7 +536,8 @@ func (t *ResolvedPipelineTask) skipBecauseParentTaskWasSkipped(facts *PipelineRu
 		if parentSkipStatus := parentTask.Skip(facts); parentSkipStatus.IsSkipped {
 			// if the parent task was skipped due to its `when` expressions,
 			// then we should ignore that and continue evaluating if we should skip because of other parent tasks
-			if parentSkipStatus.SkippingReason == v1.WhenExpressionsSkip {
+			if parentSkipStatus.SkippingReason == v1.WhenExpressionsSkip ||
+			parentSkipStatus.SkippingReason == v1.BypassedRetrySkip {
 				continue
 			}
 			return true

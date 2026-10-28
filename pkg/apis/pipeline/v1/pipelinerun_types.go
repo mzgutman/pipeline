@@ -588,6 +588,11 @@ type PipelineRunStatusFields struct {
 	// +optional
 	// +listType=atomic
 	RetriedTaskResults []RetriedTaskResult `json:"retriedTaskResults,omitempty"`
+	// BypassedTaskNames is the list of task names that were preserved (succeeded)
+	// on the source PipelineRun and are bypassed on this partial retry.
+	// +optional
+	// +listType=atomic
+	BypassedTaskNames []string `json:"bypassedTaskNames,omitempty"`
 }
 
 // RetriedTaskResult stores one memoized result from a preserved task.
@@ -635,6 +640,9 @@ const (
 	FinallyTimedOutSkip SkippingReason = "PipelineRun Finally timeout has been reached"
 	// EmptyArrayInMatrixParams means the task was skipped because Matrix parameters contain empty array.
 	EmptyArrayInMatrixParams SkippingReason = "Matrix Parameters have an empty array"
+	// BypassedRetrySkip means the task was bypassed because it succeeded on the source
+	// PipelineRun and the caller requested a partial retry.
+	BypassedRetrySkip SkippingReason = "Task was bypassed by partial retry"
 	// None means the task was not skipped
 	None SkippingReason = "None"
 )

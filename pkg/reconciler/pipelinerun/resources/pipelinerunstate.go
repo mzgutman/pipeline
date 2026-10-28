@@ -83,6 +83,11 @@ type PipelineRunFacts struct {
 	// condition to help users understand why specific tasks were not executed
 	// (e.g. missing result references).
 	ValidationFailedErrors map[string]string
+
+	// BypassedTasks is the set of task names that succeeded on the source
+    // PipelineRun and should be treated as succeeded on this retry run.
+    // Populated by the reconciler when pr.IsRetry() == true.
+    BypassedTasks map[string]bool
 }
 
 // PipelineRunTimeoutsState records information about start times and timeouts for the PipelineRun, so that the PipelineRunFacts

@@ -1,7 +1,12 @@
 package resources
 
-import v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+import (
+    "time"
 
+    "github.com/tektoncd/pipeline/pkg/reconciler/pipeline/dag"
+    v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+    "k8s.io/utils/clock"
+)
 // RetrySubgraph holds the result of ComputeRetrySubgraph.
 type RetrySubgraph struct {
     PreservedTasks map[string]bool // succeeded on source → bypass on retry
@@ -52,4 +57,25 @@ func ComputeRetrySubgraph(state PipelineRunState, facts *PipelineRunFacts) Retry
         PreservedTasks: preserved,
         RerunTasks:     rerun,
     }
+}
+
+// BuildMinimalFacts constructs a PipelineRunFacts sufficient for
+// ComputeRetrySubgraph from an already-populated PipelineRunState.
+func BuildMinimalFacts(state PipelineRunState) (*PipelineRunFacts, error) {
+    var dagTasks []v1.PipelineTask
+    for _, rpt := range state {
+        dagTasks = append(dagTasks, *rpt.PipelineTask)
+    }
+    d, err := dag.Build(v1.PipelineTaskList(dagTasks), v1.PipelineTaskList(dagTasks).Deps())
+    if err != nil {
+        return nil, err
+    }
+    df, _ := dag.Build(v1.PipelineTaskList(nil), map[string][]string{})
+    now := time.Now()
+    return &PipelineRunFacts{
+        State:           state,
+        TasksGraph:      d,
+        FinalTasksGraph: df,
+        TimeoutsState:   PipelineRunTimeoutsState{StartTime: &now, Clock: clock.RealClock{}},
+    }, nil
 }
