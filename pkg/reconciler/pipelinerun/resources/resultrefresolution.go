@@ -121,11 +121,16 @@ func convertToResultRefs(pipelineRunState PipelineRunState, target *ResolvedPipe
 			return nil, resultRef.PipelineTask, fmt.Errorf("could not find task %q referenced by result", resultRef.PipelineTask)
 		}
 
-		if !referencedPipelineTask.isSuccessful() && !referencedPipelineTask.isFailure() {
+		if !referencedPipelineTask.isSuccessful() && !referencedPipelineTask.isFailure() && !referencedPipelineTask.isBypassed() {
 			return nil, resultRef.PipelineTask, fmt.Errorf("task %q referenced by result was not finished", referencedPipelineTask.PipelineTask.Name)
 		}
-		// Custom Task
 		switch {
+		case referencedPipelineTask.isBypassed():
+			resolved, err := resolveBypassedResultRef(referencedPipelineTask, resultRef)
+			if err != nil {
+				return nil, resultRef.PipelineTask, err
+			}
+			resolvedResultRefs = append(resolvedResultRefs, resolved)
 		case referencedPipelineTask.IsCustomTask():
 			resolved, err := resolveCustomResultRef(referencedPipelineTask.CustomRuns, resultRef)
 			if err != nil {
@@ -196,6 +201,23 @@ func resolveResultRef(taskRuns []*v1.TaskRun, resultRef *v1.ResultRef) (*Resolve
 	return &ResolvedResultRef{
 		Value:           resultValue,
 		FromTaskRun:     taskRunName,
+		FromRun:         "",
+		ResultReference: *resultRef,
+	}, nil
+}
+
+// resolveBypassedResultRef resolves a result reference against a bypassed
+// task's pre-populated ResultsCache (memoized from the source PipelineRun),
+// since a bypassed task has no live TaskRun on the retry run.
+func resolveBypassedResultRef(referencedPipelineTask *ResolvedPipelineTask, resultRef *v1.ResultRef) (*ResolvedResultRef, error) {
+	vals, ok := referencedPipelineTask.ResultsCache[resultRef.Result]
+	if !ok || len(vals) == 0 {
+		return nil, fmt.Errorf("%w: Could not find result with name %s for bypassed pipeline task %s",
+			ErrInvalidTaskResultReference, resultRef.Result, resultRef.PipelineTask)
+	}
+	return &ResolvedResultRef{
+		Value:           *v1.NewStructuredValues(vals[0]),
+		FromTaskRun:     "",
 		FromRun:         "",
 		ResultReference: *resultRef,
 	}, nil

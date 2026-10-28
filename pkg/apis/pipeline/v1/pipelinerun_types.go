@@ -164,8 +164,8 @@ func (pr *PipelineRun) IsPending() bool {
 // IsRetry returns true if this PipelineRun is a retry of another PipelineRun,
 // indicated by the presence of the retryOf annotation.
 func (pr *PipelineRun) IsRetry() bool {
-    _, ok := pr.Annotations[RetryOfAnnotation]
-    return ok
+	_, ok := pr.Annotations[RetryOfAnnotation]
+	return ok
 }
 
 // GetNamespacedName returns a k8s namespaced name that identifies this PipelineRun

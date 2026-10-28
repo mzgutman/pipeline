@@ -301,7 +301,7 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) (rec
 		logger.Errorf("Failed to propagate pipeline name label to pipelinerun %s: %v", pr.Name, err)
 		return c.emitReconcileEvents(ctx, pr, before, err)
 	}
-	
+
 	// If this PipelineRun is a retry of another, handle it via the retry path.
 	if pr.IsRetry() {
 		if err := c.setupRetry(ctx, pr); err != nil {
@@ -822,15 +822,30 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 		},
 	}
 
-	// POC-4: for partial retries, mark preserved tasks as bypassed so they
-	// are treated as already-succeeded by the scheduling logic.
 	if pr.IsRetry() && len(pr.Status.BypassedTaskNames) > 0 {
-		pipelineRunFacts.BypassedTasks = make(map[string]bool, len(pr.Status.BypassedTaskNames))
+		bypassed := make(map[string]bool, len(pr.Status.BypassedTaskNames))
 		for _, name := range pr.Status.BypassedTaskNames {
-			pipelineRunFacts.BypassedTasks[name] = true
+			bypassed[name] = true
+		}
+		pipelineRunFacts.BypassedTasks = bypassed
+
+		// Mark each bypassed task and pre-populate its ResultsCache from the
+		// memoized results harvested in setupRetry, before any scheduling begins.
+		stateMap := pipelineRunFacts.State.ToMap()
+		for _, rtr := range pr.Status.RetriedTaskResults {
+			if rpt, ok := stateMap[rtr.PipelineTaskName]; ok {
+				if rpt.ResultsCache == nil {
+					rpt.ResultsCache = make(map[string][]string)
+				}
+				rpt.ResultsCache[rtr.Name] = []string{rtr.Value}
+			}
+		}
+		for name := range bypassed {
+			if rpt, ok := stateMap[name]; ok {
+				rpt.IsBypassed = true
+			}
 		}
 	}
-
 
 	if pr.Status.StartTime != nil {
 		pipelineRunFacts.TimeoutsState.StartTime = &pr.Status.StartTime.Time

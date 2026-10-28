@@ -36,27 +36,27 @@ func (c *Reconciler) setupRetry(ctx context.Context, pr *v1.PipelineRun) error {
 		return fmt.Errorf("setupRetry: could not fetch source PipelineRun %q: %w", sourceRunName, err)
 	}
 
-    // In setupRetry, replace the BuildRetrySourceState call with:
-    var sourceState resources.PipelineRunState
-    for _, ref := range sourcePR.Status.ChildReferences {
-        if ref.Kind != "TaskRun" {
-            continue
-        }
-        tr, err := c.taskRunLister.TaskRuns(pr.Namespace).Get(ref.Name)
-        if err != nil {
-            continue // best-effort for POC
-        }
-        rpt := &resources.ResolvedPipelineTask{
-            PipelineTask: &v1.PipelineTask{Name: ref.PipelineTaskName},
-            TaskRuns:     []*v1.TaskRun{tr},
-        }
-        sourceState = append(sourceState, rpt)
-    }
-    sourceFacts, err := resources.BuildMinimalFacts(sourceState)
-    if err != nil {
-        return fmt.Errorf("setupRetry: %w", err)
-    }
-    subgraph := resources.ComputeRetrySubgraph(sourceState, sourceFacts)
+	// In setupRetry, replace the BuildRetrySourceState call with:
+	var sourceState resources.PipelineRunState
+	for _, ref := range sourcePR.Status.ChildReferences {
+		if ref.Kind != "TaskRun" {
+			continue
+		}
+		tr, err := c.taskRunLister.TaskRuns(pr.Namespace).Get(ref.Name)
+		if err != nil {
+			continue // best-effort for POC
+		}
+		rpt := &resources.ResolvedPipelineTask{
+			PipelineTask: &v1.PipelineTask{Name: ref.PipelineTaskName},
+			TaskRuns:     []*v1.TaskRun{tr},
+		}
+		sourceState = append(sourceState, rpt)
+	}
+	sourceFacts, err := resources.BuildMinimalFacts(sourceState)
+	if err != nil {
+		return fmt.Errorf("setupRetry: %w", err)
+	}
+	subgraph := resources.ComputeRetrySubgraph(sourceState, sourceFacts)
 
 	// POC-3: harvest memoized results from source pipeline results.
 	pr.Status.RetriedTaskResults = resources.HarvestRetryResults(

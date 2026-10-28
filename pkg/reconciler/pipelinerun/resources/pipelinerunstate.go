@@ -85,9 +85,9 @@ type PipelineRunFacts struct {
 	ValidationFailedErrors map[string]string
 
 	// BypassedTasks is the set of task names that succeeded on the source
-    // PipelineRun and should be treated as succeeded on this retry run.
-    // Populated by the reconciler when pr.IsRetry() == true.
-    BypassedTasks map[string]bool
+	// PipelineRun and should be treated as succeeded on this retry run.
+	// Populated by the reconciler when pr.IsRetry() == true.
+	BypassedTasks map[string]bool
 }
 
 // PipelineRunTimeoutsState records information about start times and timeouts for the PipelineRun, so that the PipelineRunFacts
@@ -193,15 +193,18 @@ func (state PipelineRunState) GetTaskRunsResults() map[string][]v1.TaskRunResult
 		if rpt.IsCustomTask() {
 			continue
 		}
-		if !rpt.isSuccessful() && !rpt.isFailure() {
+		if !rpt.isSuccessful() && !rpt.isFailure() && !rpt.isBypassed() {
 			continue
 		}
-		if rpt.PipelineTask.IsMatrixed() {
+		switch {
+		case rpt.isBypassed():
+			results[rpt.PipelineTask.Name] = taskRunResultsFromCache(rpt.ResultsCache)
+		case rpt.PipelineTask.IsMatrixed():
 			taskRunResults := ConvertResultsMapToTaskRunResults(rpt.ResultsCache)
 			if len(taskRunResults) > 0 {
 				results[rpt.PipelineTask.Name] = taskRunResults
 			}
-		} else {
+		default:
 			results[rpt.PipelineTask.Name] = rpt.TaskRuns[0].Status.Results
 		}
 	}
@@ -252,6 +255,23 @@ func ConvertResultsMapToTaskRunResults(resultsMap map[string][]string) []v1.Task
 		taskRunResults = append(taskRunResults, taskRunResult)
 	}
 	return taskRunResults
+}
+
+// taskRunResultsFromCache builds scalar TaskRunResults from a bypassed
+// task's pre-populated ResultsCache (one memoized value per result name).
+func taskRunResultsFromCache(resultsCache map[string][]string) []v1.TaskRunResult {
+	var out []v1.TaskRunResult
+	for name, vals := range resultsCache {
+		if len(vals) == 0 {
+			continue
+		}
+		out = append(out, v1.TaskRunResult{
+			Name:  name,
+			Type:  v1.ResultsTypeString,
+			Value: *v1.NewStructuredValues(vals[0]),
+		})
+	}
+	return out
 }
 
 // GetRunsResults returns a map of all completed Runs in the state, with the pipeline task name as the key
