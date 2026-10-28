@@ -308,10 +308,11 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) (rec
 			logger.Errorf("Error in retry setup for PipelineRun %s: %v", pr.Name, err)
 			return c.emitReconcileEvents(ctx, pr, before, err)
 		}
-		// POC-1: stub exits here. Later POC stories will continue into normal reconcile.
-		return c.emitReconcileEvents(ctx, pr, before, nil)
+		// Fall through into the normal reconcile path below. pr.Status.BypassedTaskNames
+		// (set by setupRetry) will be applied to pipelineRunFacts.BypassedTasks once facts
+		// are constructed in c.reconcile(), so bypassed tasks are skipped rather than
+		// rescheduled, and only rerun tasks get TaskRuns created.
 	}
-
 	// If the pipelinerun is cancelled, cancel tasks and update status
 	if pr.IsCancelled() {
 		err := cancelPipelineRun(ctx, logger, pr, c.PipelineClientSet)
