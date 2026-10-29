@@ -570,6 +570,33 @@ func (c *Reconciler) resolvePipelineState(
 				return nil, controller.NewPermanentError(err)
 			}
 		}
+		// If this PipelineRun is a partial retry and this task was preserved from the
+		// source run, mark it bypassed and pre-populate its ResultsCache with the
+		// memoized results from setupRetry *before* appending it to pst. Later tasks
+		// resolved in this same loop (and the current task's own speculative result-ref
+		// resolution) consult pst via ResolvePipelineTask, so this must happen here —
+		// not only in the later wiring step in reconcile() — or a downstream task's
+		// very first result-ref resolution attempt will race setupRetry and
+		// permanently bake in unresolved $(tasks...) references into its TaskRun.
+		if pr.IsRetry() {
+			for _, bypassedName := range pr.Status.BypassedTaskNames {
+				if resolvedTask.PipelineTask.Name != bypassedName {
+					continue
+				}
+				resolvedTask.IsBypassed = true
+				for _, rtr := range pr.Status.RetriedTaskResults {
+					if rtr.PipelineTaskName != bypassedName {
+						continue
+					}
+					if resolvedTask.ResultsCache == nil {
+						resolvedTask.ResultsCache = make(map[string][]string)
+					}
+					resolvedTask.ResultsCache[rtr.Name] = []string{rtr.Value}
+				}
+				break
+			}
+		}
+
 		pst = append(pst, resolvedTask)
 	}
 

@@ -1059,6 +1059,14 @@ func CheckMissingResultReferences(pipelineRunState PipelineRunState, target *Res
 		if !ok {
 			return fmt.Errorf("Result reference error: Could not find ref \"%s\" in internal pipelineRunState", resultRef.PipelineTask)
 		}
+		if referencedPipelineTask.isBypassed() {
+			// Bypassed tasks never get a live TaskRun/CustomRun on a partial
+			// retry — their results are memoized in ResultsCache instead.
+			if vals, ok := referencedPipelineTask.ResultsCache[resultRef.Result]; !ok || len(vals) == 0 {
+				return fmt.Errorf("Result reference error: Could not find result with name %s for bypassed pipeline task %s", resultRef.Result, resultRef.PipelineTask)
+			}
+			continue
+		}
 		if referencedPipelineTask.IsCustomTask() {
 			if len(referencedPipelineTask.CustomRuns) == 0 {
 				return fmt.Errorf("Result reference error: Internal result ref \"%s\" has zero-length CustomRuns", resultRef.PipelineTask)

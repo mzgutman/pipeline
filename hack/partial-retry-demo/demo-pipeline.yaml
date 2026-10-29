@@ -1,0 +1,93 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: demo-clone
+spec:
+  results:
+    - name: commit-sha
+      description: the (fake) commit SHA that was cloned
+  steps:
+    - name: clone
+      image: mirror.gcr.io/alpine
+      script: |
+        #!/bin/sh
+        echo "cloning repo..."
+        echo -n "abc1234" | tee $(results.commit-sha.path)
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: demo-build
+spec:
+  params:
+    - name: should-fail
+      type: string
+      default: "false"
+    - name: commit-sha
+      type: string
+  results:
+    - name: image-digest
+      description: the (fake) digest of the built image
+  steps:
+    - name: build
+      image: mirror.gcr.io/alpine
+      script: |
+        #!/bin/sh
+        echo "building commit $(params.commit-sha)..."
+        if [ "$(params.should-fail)" = "true" ]; then
+          echo "simulated build failure"
+          exit 1
+        fi
+        echo -n "sha256:deadbeef" | tee $(results.image-digest.path)
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: demo-deploy
+spec:
+  params:
+    - name: commit-sha
+      type: string
+    - name: image-digest
+      type: string
+  steps:
+    - name: deploy
+      image: mirror.gcr.io/alpine
+      script: |
+        #!/bin/sh
+        echo "Deploying commit=$(params.commit-sha) image=$(params.image-digest)"
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: demo-partial-retry-pipeline
+spec:
+  params:
+    - name: should-fail
+      type: string
+      default: "true"
+  tasks:
+    - name: clone
+      taskRef:
+        name: demo-clone
+    - name: build
+      taskRef:
+        name: demo-build
+      params:
+        - name: should-fail
+          value: $(params.should-fail)
+        - name: commit-sha
+          value: $(tasks.clone.results.commit-sha)
+    - name: deploy
+      taskRef:
+        name: demo-deploy
+      params:
+        - name: commit-sha
+          value: $(tasks.clone.results.commit-sha)
+        - name: image-digest
+          value: $(tasks.build.results.image-digest)
+  results:
+    - name: commit-sha
+      value: $(tasks.clone.results.commit-sha)
+    - name: image-digest
+      value: $(tasks.build.results.image-digest)
