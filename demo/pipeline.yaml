@@ -1,0 +1,30 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: poc-demo-pipeline
+spec:
+  params:
+  - name: should-fail
+    type: string
+    default: "true"
+  results:
+  - name: commit-sha
+    value: $(tasks.clone.results.commit-sha)
+  tasks:
+  - name: clone
+    taskRef:
+      name: poc-clone
+  - name: build
+    runAfter: [clone]
+    params:
+    - name: should-fail
+      value: $(params.should-fail)
+    taskRef:
+      name: poc-build
+  - name: deploy
+    runAfter: [build]
+    params:
+    - name: commit-sha
+      value: $(tasks.clone.results.commit-sha)
+    taskRef:
+      name: poc-deploy

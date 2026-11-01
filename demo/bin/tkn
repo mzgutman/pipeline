@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# POC shim for tkn — intercepts `pipelinerun retry --partial`
+# and delegates everything else to the real tkn binary.
+set -euo pipefail
+
+REAL_TKN="$(which -a tkn | grep -v "$0" | head -1)"
+
+# Only intercept: tkn pipelinerun retry --partial <name>
+if [[ "${1:-}" == "pipelinerun" && "${2:-}" == "retry" ]]; then
+  NAMESPACE="default"
+  PARTIAL=false
+  SOURCE_RUN=""
+  PARAM_OVERRIDES=()
+
+  shift 2  # consume "pipelinerun retry"
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --partial) PARTIAL=true; shift ;;
+      -n|--namespace) NAMESPACE="$2"; shift 2 ;;
+      --param) PARAM_OVERRIDES+=("$2"); shift 2 ;;
+      *) SOURCE_RUN="$1"; shift ;;
+    esac
+  done
+
+  if [[ "$PARTIAL" != "true" ]]; then
+    exec "$REAL_TKN" pipelinerun retry "$SOURCE_RUN" -n "$NAMESPACE"
+  fi
+
+  SOURCE_UID=$(kubectl get pipelinerun "$SOURCE_RUN" -n "$NAMESPACE" \
+    -o jsonpath='{.metadata.uid}')
+  PIPELINE_REF=$(kubectl get pipelinerun "$SOURCE_RUN" -n "$NAMESPACE" \
+    -o jsonpath='{.spec.pipelineRef.name}')
+
+  # Build params yaml from --param overrides only
+  PARAMS_YAML=""
+  for p in "${PARAM_OVERRIDES[@]}"; do
+    NAME="${p%%=*}"
+    VALUE="${p#*=}"
+    PARAMS_YAML+="  - name: ${NAME}"$'\n'
+    PARAMS_YAML+="    value: \"${VALUE}\""$'\n'
+  done
+
+  echo "Retrying '$SOURCE_RUN' with strategy=partial (pipeline: $PIPELINE_REF)"
+
+  RETRY_NAME=$(kubectl create -o jsonpath='{.metadata.name}' -f - <<EOF
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: ${SOURCE_RUN}-retry-
+  namespace: ${NAMESPACE}
+  annotations:
+    tekton.dev/retryOf: "${SOURCE_RUN}"
+    tekton.dev/retryOfUID: "${SOURCE_UID}"
+    tekton.dev/retryStrategy: "partial"
+spec:
+  pipelineRef:
+    name: ${PIPELINE_REF}
+  params:
+${PARAMS_YAML}
+EOF
+)
+
+  echo "Created: $RETRY_NAME"
+  echo "Watch:   tkn pipelinerun logs -f $RETRY_NAME -n $NAMESPACE"
+  exit 0
+fi
+
+# Everything else → real tkn
+exec "$REAL_TKN" "$@"

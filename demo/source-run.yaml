@@ -1,0 +1,10 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: poc-demo-source-
+spec:
+  pipelineRef:
+    name: poc-demo-pipeline
+  params:
+  - name: should-fail
+    value: "true"

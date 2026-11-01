@@ -1,0 +1,44 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: poc-clone
+spec:
+  results:
+  - name: commit-sha
+  steps:
+  - name: clone
+    image: alpine
+    script: |
+      echo -n "abc123" | tee $(results.commit-sha.path)
+      echo "clone: done"
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: poc-build
+spec:
+  params:
+  - name: should-fail
+    default: "true"
+  steps:
+  - name: build
+    image: alpine
+    script: |
+      if [ "$(params.should-fail)" = "true" ]; then
+        echo "build: simulating failure"
+        exit 1
+      fi
+      echo "build: success"
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: poc-deploy
+spec:
+  params:
+  - name: commit-sha
+  steps:
+  - name: deploy
+    image: alpine
+    script: |
+      echo "deploy: deploying commit $(params.commit-sha)"
