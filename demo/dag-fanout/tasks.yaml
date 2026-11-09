@@ -1,0 +1,80 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: dag-a
+spec:
+  results:
+  - name: source-id
+  steps:
+  - name: produce-source
+    image: alpine
+    script: |
+      echo -n "source-123" | tee "$(results.source-id.path)"
+      echo "A: source prepared"
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: dag-b
+spec:
+  params:
+  - name: source-id
+  results:
+  - name: build-id
+  steps:
+  - name: build
+    image: alpine
+    script: |
+      echo "B: building from $(params.source-id)"
+      echo -n "build-$(params.source-id)" | tee "$(results.build-id.path)"
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: dag-c
+spec:
+  params:
+  - name: build-id
+  - name: fail-c
+  results:
+  - name: candidate-id
+  steps:
+  - name: test
+    image: alpine
+    script: |
+      if [ "$(params.fail-c)" = "true" ]; then
+        echo "C: simulating a failure; waiting for independent task D to finish"
+        sleep 8
+        exit 1
+      fi
+      echo "C: tests passed for $(params.build-id)"
+      echo -n "$(params.build-id)-candidate" | tee "$(results.candidate-id.path)"
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: dag-d
+spec:
+  params:
+  - name: source-id
+  results:
+  - name: audit-id
+  steps:
+  - name: audit
+    image: alpine
+    script: |
+      echo "D: independent audit of $(params.source-id) passed"
+      echo -n "audit-ok" | tee "$(results.audit-id.path)"
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: dag-e
+spec:
+  params:
+  - name: candidate-id
+  steps:
+  - name: publish
+    image: alpine
+    script: |
+      echo "E: publishing $(params.candidate-id)"

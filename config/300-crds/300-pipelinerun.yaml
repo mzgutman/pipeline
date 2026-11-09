@@ -5340,6 +5340,14 @@ spec:
                   type: object
                   additionalProperties:
                     type: string
+                bypassedTaskNames:
+                  description: |-
+                    BypassedTaskNames is the list of task names that were preserved (succeeded)
+                    on the source PipelineRun and are bypassed on this partial retry.
+                  type: array
+                  items:
+                    type: string
+                  x-kubernetes-list-type: atomic
                 childReferences:
                   description: list of TaskRun and Run names, PipelineTask names, and API versions/kinds for children of this PipelineRun.
                   type: array
@@ -5561,6 +5569,35 @@ spec:
                         description: Value is the result returned from the execution of this PipelineRun
                         x-kubernetes-preserve-unknown-fields: true
                   x-kubernetes-list-type: atomic
+                retriedTaskResults:
+                  description: |-
+                    RetriedTaskResults holds memoized results from preserved tasks on the
+                    source PipelineRun, so rerun tasks can resolve $(tasks.X.results.Y)
+                    without a live TaskRun for the preserved task.
+                  type: array
+                  items:
+                    description: RetriedTaskResult stores one memoized result from a preserved task.
+                    type: object
+                    required:
+                      - name
+                      - pipelineTaskName
+                      - value
+                    properties:
+                      name:
+                        type: string
+                      pipelineTaskName:
+                        type: string
+                      value:
+                        type: string
+                  x-kubernetes-list-type: atomic
+                retrySetupComplete:
+                  description: |-
+                    RetrySetupComplete records that setupRetry has already computed the
+                    preserved/rerun subgraph and harvested results for this retry
+                    PipelineRun, so subsequent reconciliations can skip recomputation —
+                    even when BypassedTaskNames and RetriedTaskResults are both
+                    legitimately empty (nothing was preserved).
+                  type: boolean
                 skippedTasks:
                   description: list of tasks that were skipped due to when expressions evaluating to false
                   type: array

@@ -11,6 +11,7 @@ if [[ "${1:-}" == "pipelinerun" && "${2:-}" == "retry" ]]; then
   PARTIAL=false
   SOURCE_RUN=""
   PARAM_OVERRIDES=()
+  SETUP_TIMEOUT="${RETRY_SETUP_TIMEOUT:-30}"
 
   shift 2  # consume "pipelinerun retry"
   while [[ $# -gt 0 ]]; do
@@ -61,6 +62,36 @@ EOF
 )
 
   echo "Created: $RETRY_NAME"
+  echo "Waiting for the controller to prepare the retry plan..."
+
+  DEADLINE=$((SECONDS + SETUP_TIMEOUT))
+  SETUP_COMPLETE=""
+  while (( SECONDS < DEADLINE )); do
+    SETUP_COMPLETE=$(kubectl get pipelinerun "$RETRY_NAME" -n "$NAMESPACE" \
+      -o jsonpath='{.status.retrySetupComplete}' 2>/dev/null || true)
+    if [[ "$SETUP_COMPLETE" == "true" ]]; then
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ "$SETUP_COMPLETE" != "true" ]]; then
+    echo "Retry plan was not observed within ${SETUP_TIMEOUT}s." >&2
+    echo "Inspect the PipelineRun with: kubectl describe pipelinerun $RETRY_NAME -n $NAMESPACE" >&2
+    exit 1
+  fi
+
+  PRESERVED_TASKS=$(kubectl get pipelinerun "$RETRY_NAME" -n "$NAMESPACE" \
+    -o jsonpath='{.status.bypassedTaskNames}')
+  PRESERVED_TASKS="${PRESERVED_TASKS#[}"
+  PRESERVED_TASKS="${PRESERVED_TASKS%]}"
+  PRESERVED_TASKS="${PRESERVED_TASKS//\"/}"
+  PRESERVED_TASKS="${PRESERVED_TASKS//,/ }"
+  if [[ -n "$PRESERVED_TASKS" ]]; then
+    echo "Retry plan ready. Preserved tasks: ${PRESERVED_TASKS% }"
+  else
+    echo "Retry plan ready. Preserved tasks: none"
+  fi
   echo "Watch:   tkn pipelinerun logs -f $RETRY_NAME -n $NAMESPACE"
   exit 0
 fi

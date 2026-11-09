@@ -449,6 +449,12 @@ const (
 	PipelineRunReasonCELEvaluationFailed PipelineRunReason = "CELEvaluationFailed"
 	// PipelineRunReasonInvalidParamValue indicates that the PipelineRun Param input value is not allowed.
 	PipelineRunReasonInvalidParamValue PipelineRunReason = "InvalidParamValue"
+	// PipelineRunReasonRetrySetupFailed indicates that a retry PipelineRun failed
+	// setup validation (malformed retry annotations, missing/non-terminal source,
+	// unreadable source data, or an empty rerun subgraph). Per TEP-0194 there is
+	// no fallback to a full retry: the PipelineRun fails with this reason before
+	// any TaskRun is created.
+	PipelineRunReasonRetrySetupFailed PipelineRunReason = "RetrySetupFailed"
 )
 
 // PipelineTaskOnErrorAnnotation is used to pass the failure strategy to TaskRun pods from PipelineTask OnError field
@@ -465,6 +471,14 @@ const RetryOfUIDAnnotation = "tekton.dev/retryOfUID"
 // RetryStrategyAnnotation holds the retry strategy: "full" re-runs every task,
 // "partial" re-runs only the failed subgraph.
 const RetryStrategyAnnotation = "tekton.dev/retryStrategy"
+
+// Allowed values of the tekton.dev/retryStrategy annotation.
+const (
+	// RetryStrategyFull re-runs every task (no bypassing, no memoization).
+	RetryStrategyFull = "full"
+	// RetryStrategyPartial re-runs only the failed subgraph.
+	RetryStrategyPartial = "partial"
+)
 
 func (t PipelineRunReason) String() string {
 	return string(t)

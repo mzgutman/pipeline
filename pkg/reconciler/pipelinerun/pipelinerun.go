@@ -304,14 +304,19 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) (rec
 
 	// If this PipelineRun is a retry of another, handle it via the retry path.
 	if pr.IsRetry() {
-		if err := c.setupRetry(ctx, pr); err != nil {
+		preparedNow, err := c.setupRetry(ctx, pr)
+		if err != nil {
 			logger.Errorf("Error in retry setup for PipelineRun %s: %v", pr.Name, err)
 			return c.emitReconcileEvents(ctx, pr, before, err)
 		}
-		// Fall through into the normal reconcile path below. pr.Status.BypassedTaskNames
-		// (set by setupRetry) will be applied to pipelineRunFacts.BypassedTasks once facts
-		// are constructed in c.reconcile(), so bypassed tasks are skipped rather than
-		// rescheduled, and only rerun tasks get TaskRuns created.
+		if preparedNow {
+			// Persist the retry plan before scheduling any TaskRuns. A later
+			// reconciliation observes RetrySetupComplete and starts execution.
+			return c.emitReconcileEvents(ctx, pr, before, controller.NewRequeueAfter(remoteResolutionRequeueAfter))
+		}
+		// The retry plan was persisted by an earlier reconciliation. The normal
+		// reconcile path can now schedule rerun tasks using the saved bypass list
+		// and memoized results.
 	}
 	// If the pipelinerun is cancelled, cancel tasks and update status
 	if pr.IsCancelled() {

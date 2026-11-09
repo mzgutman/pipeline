@@ -1,0 +1,10 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: poc-dag-source-
+spec:
+  pipelineRef:
+    name: poc-dag-fanout
+  params:
+  - name: fail-c
+    value: "true"

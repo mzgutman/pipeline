@@ -1,0 +1,46 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: poc-dag-fanout
+spec:
+  params:
+  - name: fail-c
+    type: string
+    default: "true"
+  results:
+  - name: build-id
+    value: $(tasks.b.results.build-id)
+  - name: audit-id
+    value: $(tasks.d.results.audit-id)
+  - name: candidate-id
+    value: $(tasks.c.results.candidate-id)
+  tasks:
+  - name: a
+    taskRef:
+      name: dag-a
+  - name: b
+    params:
+    - name: source-id
+      value: $(tasks.a.results.source-id)
+    taskRef:
+      name: dag-b
+  - name: c
+    params:
+    - name: build-id
+      value: $(tasks.b.results.build-id)
+    - name: fail-c
+      value: $(params.fail-c)
+    taskRef:
+      name: dag-c
+  - name: d
+    params:
+    - name: source-id
+      value: $(tasks.a.results.source-id)
+    taskRef:
+      name: dag-d
+  - name: e
+    params:
+    - name: candidate-id
+      value: $(tasks.c.results.candidate-id)
+    taskRef:
+      name: dag-e
