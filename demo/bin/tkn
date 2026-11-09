@@ -5,10 +5,11 @@ set -euo pipefail
 
 REAL_TKN="$(which -a tkn | grep -v "$0" | head -1)"
 
-# Only intercept: tkn pipelinerun retry --partial <name>
+# Only intercept: tkn pipelinerun retry (--partial|--full) <name>
 if [[ "${1:-}" == "pipelinerun" && "${2:-}" == "retry" ]]; then
   NAMESPACE="default"
   PARTIAL=false
+  FULL=false
   SOURCE_RUN=""
   PARAM_OVERRIDES=()
   SETUP_TIMEOUT="${RETRY_SETUP_TIMEOUT:-30}"
@@ -17,15 +18,24 @@ if [[ "${1:-}" == "pipelinerun" && "${2:-}" == "retry" ]]; then
   while [[ $# -gt 0 ]]; do
     case $1 in
       --partial) PARTIAL=true; shift ;;
+      --full) FULL=true; shift ;;
       -n|--namespace) NAMESPACE="$2"; shift 2 ;;
       --param) PARAM_OVERRIDES+=("$2"); shift 2 ;;
       *) SOURCE_RUN="$1"; shift ;;
     esac
   done
 
-  if [[ "$PARTIAL" != "true" ]]; then
+  if [[ "$PARTIAL" == "true" && "$FULL" == "true" ]]; then
+    echo "error: --partial and --full are mutually exclusive" >&2
+    exit 2
+  fi
+  if [[ "$PARTIAL" != "true" && "$FULL" != "true" ]]; then
+    # No strategy requested: delegate to the real tkn (native full rerun,
+    # outside the POC annotation contract).
     exec "$REAL_TKN" pipelinerun retry "$SOURCE_RUN" -n "$NAMESPACE"
   fi
+  STRATEGY="partial"
+  [[ "$FULL" == "true" ]] && STRATEGY="full"
 
   SOURCE_UID=$(kubectl get pipelinerun "$SOURCE_RUN" -n "$NAMESPACE" \
     -o jsonpath='{.metadata.uid}')
@@ -41,7 +51,7 @@ if [[ "${1:-}" == "pipelinerun" && "${2:-}" == "retry" ]]; then
     PARAMS_YAML+="    value: \"${VALUE}\""$'\n'
   done
 
-  echo "Retrying '$SOURCE_RUN' with strategy=partial (pipeline: $PIPELINE_REF)"
+  echo "Retrying '$SOURCE_RUN' with strategy=$STRATEGY (pipeline: $PIPELINE_REF)"
 
   RETRY_NAME=$(kubectl create -o jsonpath='{.metadata.name}' -f - <<EOF
 apiVersion: tekton.dev/v1
@@ -52,7 +62,7 @@ metadata:
   annotations:
     tekton.dev/retryOf: "${SOURCE_RUN}"
     tekton.dev/retryOfUID: "${SOURCE_UID}"
-    tekton.dev/retryStrategy: "partial"
+    tekton.dev/retryStrategy: "${STRATEGY}"
 spec:
   pipelineRef:
     name: ${PIPELINE_REF}
@@ -72,6 +82,17 @@ EOF
     if [[ "$SETUP_COMPLETE" == "true" ]]; then
       break
     fi
+    # Fail-close: the controller may terminally fail the retry setup before
+    # (instead of) publishing a plan — surface that immediately.
+    FAIL_REASON=$(kubectl get pipelinerun "$RETRY_NAME" -n "$NAMESPACE" \
+      -o jsonpath='{.status.conditions[0].reason}' 2>/dev/null || true)
+    if [[ "$FAIL_REASON" == "RetrySetupFailed" ]]; then
+      FAIL_MESSAGE=$(kubectl get pipelinerun "$RETRY_NAME" -n "$NAMESPACE" \
+        -o jsonpath='{.status.conditions[0].message}' 2>/dev/null || true)
+      echo "Retry setup failed (fail-close, no TaskRuns were created):" >&2
+      echo "  $FAIL_MESSAGE" >&2
+      exit 1
+    fi
     sleep 1
   done
 
@@ -87,7 +108,9 @@ EOF
   PRESERVED_TASKS="${PRESERVED_TASKS%]}"
   PRESERVED_TASKS="${PRESERVED_TASKS//\"/}"
   PRESERVED_TASKS="${PRESERVED_TASKS//,/ }"
-  if [[ -n "$PRESERVED_TASKS" ]]; then
+  if [[ "$STRATEGY" == "full" ]]; then
+    echo "Retry plan ready. Full retry: every task will re-execute (nothing preserved)."
+  elif [[ -n "$PRESERVED_TASKS" ]]; then
     echo "Retry plan ready. Preserved tasks: ${PRESERVED_TASKS% }"
   else
     echo "Retry plan ready. Preserved tasks: none"
